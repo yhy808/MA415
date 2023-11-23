@@ -1,0 +1,804 @@
+---
+title: "Daylight Saving Time and Road Safety in the United Kingdom"
+author: "Team tidyverse: Katie Hansen, Yuqing Yang, Hongyi Yu, Jeffrey Emmons"
+date: "2023-05-01"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(lubridate)
+library(TSA)
+library(modelr)
+library(tmap)
+library(sf)
+library(clock)
+```
+
+```{r, include=FALSE}
+df <- read_csv("../data/dlst_red.csv")
+dlst_2017 <- read_csv("../data/hourly_2017.csv")
+```
+
+# Abstract
+This study investigates the relationship between Daylight Saving Time (DST) and road safety in the United Kingdom from 2012 to 2017. Using data from the Harvard Review of Economics and Statistics, our analysis aims to show the effects of DST on road accidents in multiple aspects. It also compares trends in road safety for different regions in the UK by using spatial analysis. Our results show a statistically significant change in road accidents when time shifts from regular time to DST, and vice versa. The results of this study could potentially be utilized to increase safety precautions and awareness around annual time shifting as well as be utilized as scientific resources in the debate over whether or not to continue with the Daylight Saving Time practice. 
+
+# Introduction
+Daylight saving has been a controversial issue for many countries around the world. In the United Kingdom, the use of Daylight Savings Time initially originated with the Summer Time Act of 1916, being established during World War I for fuel conservation (The Economic Times). While the practice theoretically conserves energy and helps people enjoy more sunlight in the evening during warmer months, the one-hour change is not trivial for humans’ physical and mental health in the long term. One study suggests that people sleep an average of 40 minutes less on the day after “Spring Forward” compared to other days of the year (Barnes 2009). Disrupted sleep not only causes fatigue and less focus but also exacerbates health problems such as depression, seasonal disorders, and even heart attacks. Such effects also relate to road safety and vehicle collisions. Although longer daylight hours give drivers better visibility to some extent, we raise a hypothesis that the number of car accidents may be affected by annual changing time due to Daylight Saving Time.
+
+This report will discuss the effects of Daylight Saving Time on road safety in the UK between 2012 to 2017. We will look at how factors such as the time of the year, the geographic region, and the age cohort of the drivers might affect the number of accidents that occur during the weeks before and after Daylight Saving Time. We will also analyze the impact of the long-term consequences of Daylight Saving time on road safety each year and its influence on different types of accidents, including fatal, serious, slight, and pedestrian accidents. We hope that our analysis can contribute to people’s understanding of Daylight Saving and provide some inspiration on whether to keep this convention.
+
+# Data and Methods
+## Data Source
+Replication Data, for "Spring Forward, Don't Fall Back: The Effect of Daylight Saving Time on Road Safety", Bünnings, C., & Schiele, V. (2021), Review of Economics and Statistics 103(1), 165-176, retrieved from [Harvard Review of Economics and Statistics Dataverse](https://doi.org/10.7910/DVN/UVUXDR)
+
+## Data Description
+The dataset contains detailed information about the time, location, and driver demographics of road accidents from 1996 to 2017. For our investigation, we will focus on the following variables from the dataset: mlong, mlat, date, hour, all_accid, u25_accid, o25u45_accid, o45u65_accid, o65_accid, year, doy (day of the year), dow (day of the week). mlong and mlat represent the longitude and latitude of each center of the corresponding region where the accident occurred. The number of accidents are categorized by the age of the driver (under 25, 26-45, 46-65, and over 65) and various level of accident severity (fatal, serious, slight)
+
+## Method
+* Preprocessing - The dataset was divided into two subsets:
+  * Primary dataset: Rows were collapsed from hourly to daily value, and the data was limited to the year from 2012 to 2017.
+  * Hourly dataset: Rows maintained original values in hourly units, and data was kept only in the year 2017.
+* Exploratory Data Analysis:
+  * Time series analysis of yearly accident counts change from 2012 to 2017
+* Daylight saving time (DST) effects on different aspects:
+  *  Impact of DST on different types of accidents(fatal, serious, slight, driver age) in the year 2017
+  * Impact of DST on accident counts in different regions by year.
+* Effect of DST change on accident counts:
+  * Analysis of  accident counts during the two weeks before and after DST starts or ends by year
+  * Analysis of accident counts per hour during the two weeks before and after DST starts or ends in the year 2017.
+* T-test: conducting T-test to compare the mean accident counts before and after DST starts or ends
+* Spatial analysis:  investigating various effect of DST change on different regions in the UK
+  
+# Results
+## Effect of Daylight Saving Time on Road Accidents by Year  
+```{r}
+df_all_accid <- df %>% select(date, year, doy, dow, all_accid) %>%
+  group_by(year, doy) %>%
+  summarize(all_per_day = sum(all_accid)) 
+
+# (df_all_accid)
+
+ggplot(df_all_accid, aes(x=doy, y=all_per_day)) +
+  stat_summary(geom="point", fun.y=mean, alpha=0.5, color="#00abbf" ) +
+  stat_smooth(col="#e83d3d") +
+  facet_wrap(~ year) +
+  ggtitle("Accidents of all Types 2012-2017")
+```
+
+Plotting the trend of accidents of all types of accidents over a five-year period reveals that the trends in the number of accidents are about the same every year. The average number of accidents for every day of the year remains around 400. Every year, there is a very slight increase in the number of accidents at the end of the year. An analysis of the direct effect of the change to and from Daylight Saving Time requires plotting a more specific time frame, two weeks in our case.  
+
+```{r}
+monthly_df<- df %>% mutate(date_month = format(as.Date(date), "%Y-%m"))%>%
+  group_by(date_month)%>%summarise(total_all_accid=sum(all_accid))
+series<-monthly_df$total_all_accid
+temp<-ts(series, start=c(2012,01), end=c(2017, 12), frequency=12)
+ts.plot(temp, xlab="Year", ylab="total all_types accidents in UK")
+title(main="Yearly Total All Accidents in UK")
+```
+
+By plotting the time series of total accident counts from the year 2012 to 2017  in the frequency of 12 (monthly data), generally we could find the time series has non-constant variance through the year, showing a downward trending from 2012 to the end of 2017. In the plot, there is a remarkable fluctuated pattern during each year, in which, for example, during the year 2012, the total number of all-type road accidents showed an increase from the start of year and peaked in late October, and then dropped down to the bottom at the end of December. Based on the pattern, we can draw a hypothesis that the time series of total road accident counts has seasonality.  
+
+```{r}
+decompose_all<-decompose(temp)
+plot(decompose_all$seasonal)+title("Seasonal component")
+```
+
+To verify our finding, we decomposed the time series into its seasonal component. According to the  plot, we can clearly see that non-constant seasonality exists in our data. Road accidents can be related to seasonality due to many factors such as daylight hours, weather, and etc. For the daylight hours, except for actual daylight hours changed between warmer months to colder months, annually twice the time shifting  may cause people to perceive more daylight in warmer months especially in the evenings. The time shifting can raise healthy risks. [According to cell.com, a 2020 study found that the switch raises the risk of fatal traffic accidents by 6%.](https://www.cell.com/current-biology/fulltext/S0960-9822(19)31678-1) Therefore, we are going to investigate more in detail on the relationship between time shifting due to DST and the frequency at which road accidents occur in the United Kingdom.
+
+## Effects of DST on Various Types of Accident (severity and age group)
+### Effects of DST on road accidents in levels of severity 
+In our dataset, there are various types of accidents such as fatal, serious, slight accidents and accidents involving pedestrians. By plotting scatter plots for each type of accidents in the year 2017, colored by time status, as well as their corresponding boxplots, except for the plot of fatal accident counts versus time keeps consistent throughout the year, we can clearly observe the accident counts change between DST interval and standard time interval for all other types (see appendix). Let’s concentrate on two dates when DST begins and ends in 2017, marked in a vertical dashed blue line. By doing so, we could observe significant fluctuations in the accident counts around these two dates. Here is the plot of accidents involving pedestrian:  
+
+```{r, fig.show='hold', out.width="50%"}
+dst_start <- ymd("2017-03-26") # Change to your region's DST start date
+dst_end <- ymd("2017-10-29")
+
+ped_accident_2017<-df %>% filter(substr(date, 1, 4)=="2017") %>%
+  mutate(is_dst = ifelse(date >= dst_start & date < dst_end, "DST", "Standard Time")) %>%
+  group_by(date, is_dst) %>%
+  summarise(total_ped_accident=sum(ped_accid))
+  
+  
+ped_accident_2017 %>%
+  ggplot(aes(x = date, y = total_ped_accident, color = is_dst)) +
+  geom_point(position = "jitter") +
+  geom_vline(xintercept = as.numeric(dst_start), color="Blue", linetype="dashed") +
+  geom_vline(xintercept = as.numeric(dst_end), color="Blue", linetype="dashed") +
+  geom_text(aes(x = dst_start, y = 100, label = "DST Start"), angle=20, color="Blue") +
+  geom_text(aes(x = dst_end, y = 100, label = "DST End"), angle=20, color="Blue") +
+  labs(title = "UK Pedestrian accidents in 2017",
+       x = "Date",
+       y = "Total Pedestrian Accidents",
+       color = "Time Status") +
+  scale_color_manual(values = c("DST" = "orange", "Standard Time" = "green"))
+
+# Improved boxplot
+ped_accident_2017 %>%
+  ggplot(aes(x = is_dst, y = total_ped_accident, fill = is_dst)) +
+  geom_boxplot() +
+  labs(title = "UK Pedestrian accidents in 2017",
+       x = "Time Status",
+       y = "Total Pedestrian Accidents") +
+  scale_fill_manual(values = c("DST" = "orange", "Standard Time" = "green")) +
+  theme_minimal()
+```
+  
+### Effects of DST by age group  
+In general, drivers under 25 and over 65 were involved in less accidents than drivers aged 25 to 65, but the change in number of accidents depending on Daylight Saving Time was minimal. The red line indicating the mean number of accidents per day shows a very slight peak for the 46-65 and over 65 age groups in the middle of the summer months. Like the general trends throughout several years, the effect of DST on accidents by age group can be better analyzed by looking at a smaller time frame before and after the time change.  
+
+```{r}
+start_date <- ymd("2017-03-26") 
+end_date <- ymd("2017-10-29")
+df_2017 <- df %>% filter(year == 2017)
+u25_accid_2017 <- df_2017 %>% 
+  mutate(month = substr(date, 6, 7), 
+         dst = (date >= start_date & date < end_date),
+         dost = doy%%86 + (doy/86) * (86 + doy)) %>%
+  group_by(month, dost, dst) %>% 
+  summarize(under_25 = sum(u25_accid), over_25_under_45 = sum(o25u45_accid), 
+            over_45_under_65 = sum(o45u65_accid), over_65 = sum(o65_accid))
+u25_accid_2017 <- u25_accid_2017 %>% 
+  pivot_longer(cols = c(`under_25`, `over_25_under_45`, `over_45_under_65`, `over_65`),
+               names_to = "driver_age_group",
+               values_to = "num_accidents")
+u25_accid_2017 %>% ggplot(aes(x = dost, y = num_accidents, color = dst)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "2017 Accidents by Driver Age Group",
+       x = "Days After Time Change",
+       y = "Number of Accidents",
+       color = "During DST") +
+  stat_summary(fun.y=mean, alpha = 0.3) +
+  stat_smooth(col="#e83d3d") + 
+  facet_wrap(~ driver_age_group) +
+  scale_color_manual(values=c("#f4d000", "#00abbf"))
+```
+
+## Effects of DST on Different Regions of the UK
+As our dataset includes the longitude and latitude of the accidents that occur, we decided to plot the observations of accidents on the map. We found that our data focus on the region from 49.75 to 60.75 latitude and from -7.75 to 1.75 longitude, which is mainly the territory of the United Kingdom. Therefore, we downloaded the UK region and district shapefile from the UK Data Service and plotted the map with the coordinate reference system. Through joining the shapefile and the DST dataset, we could identify the regions of each accident. The observations in Northern Ireland and London are too few to get the result. Therefore, we will mainly focus on the regions of Scotland, North East, North West, Yorkshire and the Humber, West Midlands, East Midlands, East of England, South East, and South West.  
+
+```{r, fig.show="hold", out.width="33%"}
+uk_district <- st_read("../data/_UK_County_Districts/UK_DISTRICTS_COUNTIES_CENSUS2011.shp", quiet = TRUE)
+uk_region <- st_read("../data/UK_region/NUTS1_Jan_2018_SGCB_in_the_UK.shp", quiet = TRUE)
+epsg_wgs84 <- 4326
+epsg_uk <- 27700
+uk_region$nuts118nm
+
+uk_region <- uk_region %>% st_transform(epsg_uk)
+
+uk_district <- uk_district %>% st_transform(epsg_uk)
+
+ggplot(uk_region) + geom_sf()
+
+ggplot(uk_district) + geom_sf()
+
+accident <- df
+
+accident_map <- accident %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+ st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk)
+
+accident_uk <- accident_map %>% filter(lengths(st_intersects(., uk_region)) > 0)
+ggplot() + geom_sf(data = uk_region) + geom_sf(data = accident_uk, alpha = 0.2)
+```
+
+Since Daylight Saving Time in the UK is different each year, we chose one week after the two periods of DST change for each year and produced the map with the number of accidents during this time from 2012 to 2017. There is a geographical pattern of the regions with more and fewer accidents over the years. Scotland, South East, South West, and East of England have a generally high accidental rate during DST each year. North East, North West, and Yorkshire and the Humber have relatively fewer accidents during DST. Generally, Northern England (the Northern part of the UK except for Scotland) has safer road traffic during DST than Southern England.  
+
+```{r, fig.show="hold", out.width="16.6%"}
+accident_2012 <- accident %>% 
+  filter(year == 2012) %>%
+  filter((date >= as.Date("2012-03-25") & date <= as.Date("2012-03-31")) | 
+           (date >= as.Date("2012-10-28") & date <= as.Date("2012-11-03")))
+accident_2012 <- accident_2012 %>% filter(!(all_accid == 0))
+accident_2012 <- accident_2012 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+
+uk_region_2012 <- uk_region %>% st_join(accident_2012) %>% group_by(nuts118nm) %>% mutate(num = n())
+tm_shape(uk_region_2012) + 
+  tm_polygons(col="num", palette ="-RdYlBu",breaks = c(0, 30, 60, 90, 120, 150, 180), title="Accidents")  +
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+accident_2013 <- accident %>% 
+  filter(year == 2013) %>%
+  filter((date >= as.Date("2013-03-31") & date <= as.Date("2013-04-06")) | 
+           (date >= as.Date("2013-10-27") & date <= as.Date("2013-11-02")))
+accident_2013 <- accident_2013 %>% filter(!(all_accid == 0))
+accident_2013 <- accident_2013 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_region_2013 <- uk_region %>% st_join(accident_2013) %>% group_by(nuts118nm) %>% mutate(num = n())
+tm_shape(uk_region_2013) + 
+  tm_polygons(col="num", palette="-RdYlBu",breaks = c(0, 30, 60, 90, 120, 150, 180), title="Accidents") +
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+accident_2014 <- accident %>% 
+  filter(year == 2014) %>%
+  filter((date >= as.Date("2014-03-30") & date <= as.Date("2014-04-05")) | 
+           (date >= as.Date("2014-10-26") & date <= as.Date("2014-11-01")))
+accident_2014 <- accident_2014 %>% filter(!(all_accid == 0))
+accident_2014 <- accident_2014 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_region_2014 <- uk_region %>% st_join(accident_2014) %>% group_by(nuts118nm) %>% mutate(num = n())
+tm_shape(uk_region_2014) + 
+  tm_polygons(col="num", palette="-RdYlBu",breaks = c(0, 30, 60, 90, 120, 150, 180), title="Accidents") +
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+accident_2015 <- accident %>% 
+  filter(year == 2015) %>%
+  filter((date >= as.Date("2015-03-29") & date <= as.Date("2015-04-04")) | 
+           (date >= as.Date("2015-10-25") & date <= as.Date("2015-10-31")))
+accident_2015 <- accident_2015 %>% filter(!(all_accid == 0))
+accident_2015 <- accident_2015 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_region_2015 <- uk_region %>% st_join(accident_2015) %>% group_by(nuts118nm) %>% mutate(num = n())
+tm_shape(uk_region_2015) + 
+  tm_polygons(col="num", palette="-RdYlBu",breaks = c(0, 30, 60, 90, 120, 150, 180), title="Accidents") +
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+accident_2016 <- accident %>% 
+  filter(year == 2016) %>%
+  filter((date >= as.Date("2016-03-27") & date <= as.Date("2016-04-02")) | 
+           (date >= as.Date("2016-10-30") & date <= as.Date("2016-11-05")))
+accident_2016 <- accident_2016 %>% filter(!(all_accid == 0))
+accident_2016 <- accident_2016 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_region_2016 <- uk_region %>% st_join(accident_2016) %>% group_by(nuts118nm) %>% mutate(num = n())
+tm_shape(uk_region_2016) + 
+  tm_polygons(col="num", palette="-RdYlBu",breaks = c(0, 30, 60, 90, 120, 150, 180), title="Accidents") +
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+accident_2017 <- accident %>% 
+  filter(year == 2017) %>%
+  filter((date >= as.Date("2017-03-26") & date <= as.Date("2017-04-01")) | 
+           (date >= as.Date("2017-10-29") & date <= as.Date("2017-11-04")))
+accident_2017 <- accident_2017 %>% filter(!(all_accid == 0))
+accident_2017 <- accident_2017 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_region_2017 <- uk_region %>% st_join(accident_2016) %>% group_by(nuts118nm) %>% mutate(num = n())
+tm_shape(uk_region_2017) + 
+  tm_polygons(col="num", palette="-RdYlBu",breaks = c(0, 30, 60, 90, 120, 150, 180), title="Accidents") +
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+```
+
+To better see the trend of the number of accidents during DST in different regions from 2012 to 2017, we faceted the observations by regions and found that the number of accidents are mostly stable for each region over time.  
+
+```{r, fig.show='hold', out.width="50%"}
+accident_dls <- accident %>% filter(((year == 2012) & (date >= as.Date("2012-03-25") & date <= as.Date("2012-03-31")) | 
+           (date >= as.Date("2012-10-28") & date <= as.Date("2012-11-03"))) |
+             (year == 2013) & (date >= as.Date("2013-03-31") & date <= as.Date("2013-04-06")) | 
+           (date >= as.Date("2013-10-27") & date <= as.Date("2013-11-02")) |
+             (year == 2014) & (date >= as.Date("2014-03-30") & date <= as.Date("2014-04-05")) | 
+           (date >= as.Date("2014-10-26") & date <= as.Date("2014-11-01")) |
+             (year == 2015) & (date >= as.Date("2015-03-29") & date <= as.Date("2015-04-04")) | 
+           (date >= as.Date("2015-10-25") & date <= as.Date("2015-10-31")) |
+             (year == 2016) & (date >= as.Date("2016-03-27") & date <= as.Date("2016-04-02")) | 
+           (date >= as.Date("2016-10-30") & date <= as.Date("2016-11-05")) |
+             (year == 2017) & (date >= as.Date("2017-03-26") & date <= as.Date("2017-04-01")) | 
+           (date >= as.Date("2017-10-29") & date <= as.Date("2017-11-04"))
+)
+accident_dls <- accident_dls %>% filter(!(all_accid == 0)) %>%
+  st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0) %>%
+    st_join(uk_region)
+accident_dls <- accident_dls %>% group_by(nuts118nm, year) %>% mutate(sum_dls = n())
+
+ggplot(accident_dls,aes(x=year, y=sum_dls)) + 
+  geom_point(postion = "jitter") + 
+  labs(title = "Accidents during DST in Different Regions",
+       x = "Year",
+       y = "Number of Accidents") +
+  geom_smooth() + 
+  facet_wrap(~ nuts118nm, nrow = 2)
+
+ggplot(accident_dls, aes(x = year, y = sum_dls)) + 
+  geom_point(aes(color = nuts118nm)) + 
+  labs(title = "Accidents during DST in Different Regions",
+       x = "Year",
+       y = "Number of Accidents") +
+  geom_smooth(aes(color = nuts118nm)) + 
+  labs(color = "Regions")
+```
+
+Although regions like Scotland have more accidents during DST, we suspected that it has a higher accident rate than other regions for the whole year, which may not relate directly to Daylight Saving Time. Therefore, we plotted the number of accidents for different regions in 2017 through the months. It shows that Scotland indeed had more accidents than other regions through 2017, while North East had the fewest accidents for the year.  
+
+```{r, fig.show='hold', out.width="50%"}
+accident_total <- accident %>% filter(year == 2017) %>%
+  st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0) %>%
+  st_join(uk_region) %>%
+  mutate(month = substr(date, 6, 7)) %>%
+  group_by(month, nuts118nm) %>%
+  mutate(sum_month = n())
+  
+
+ggplot(accident_total,aes(x=month, y=sum_month)) + 
+  geom_point(postion = "jitter") + 
+  labs(title = "2017 Accidents in Different Regions",
+       x = "Month",
+       y = "Number of Accidents") +
+  geom_smooth() + 
+  facet_wrap(~ nuts118nm, nrow = 2)
+
+ggplot(accident_total, aes(x = month, y = sum_month)) + 
+  geom_point(aes(color = nuts118nm)) + 
+  labs(title = "2017 Accidents in Different Regions",
+       x = "Month",
+       y = "Number of Accidents") +
+  geom_smooth(aes(color = nuts118nm)) + 
+  labs(color = "Regions")
+```
+
+Therefore, we decided to use a function to measure the ratio of the number of accidents during DST compared to the average number of accidents during the year. We produce a formula to divide the number of accidents per day during DST by the average number for the year and multiplied by 100. For the regions where Daylight Saving does not affect road safety, the ratio should be 100. A ratio greater than 100 means that there is a negative effect of Daylight Saving on road safety. The maps show that the effects of DST on different regions vary over the years. In 2017, Scotland was mostly affected by Daylight Saving, and the number of accidents increased dramatically during DST. However, in 2013, Scotland had fewer accidents during DST. In 2016, the effects of Daylight Saving for all regions were not obvious compared to other years. Generally, the impact of DST on the Southern part of England was relatively smaller than the North.  
+
+```{r, fig.show="hold", out.width="16.6%"}
+acci_ratio <- function(x, sum){
+  (x/14)/(sum/365)*100
+}
+
+acci_2012 <- accident %>% 
+  filter(year == 2012)
+
+acci_2012 <- acci_2012 %>% filter(!(all_accid == 0))
+acci_2012 <- acci_2012 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_ratio_2012 <- uk_region %>% 
+  st_join(acci_2012) %>% 
+  group_by(nuts118nm) %>% 
+  mutate(total = n()) %>% 
+  filter((date >= as.Date("2012-03-25") & date <= as.Date("2012-03-31")) | 
+           (date >= as.Date("2012-10-28") & date <= as.Date("2012-11-03"))) %>%
+  group_by(nuts118nm) %>% 
+  mutate(num = n()) %>%
+  mutate(ratio = acci_ratio(num, total))
+  
+tm_shape(uk_ratio_2012) + 
+  tm_polygons(col="ratio", palette ="-RdYlBu", title="Accidents Ratio") + 
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+acci_2013 <- accident %>% 
+  filter(year == 2013)
+
+acci_2013 <- acci_2013 %>% filter(!(all_accid == 0))
+acci_2013 <- acci_2013 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_ratio_2013 <- uk_region %>% 
+  st_join(acci_2013) %>% 
+  group_by(nuts118nm) %>% 
+  mutate(total = n()) %>% 
+  filter((date >= as.Date("2013-03-31") & date <= as.Date("2013-04-06")) | 
+           (date >= as.Date("2013-10-27") & date <= as.Date("2013-11-02"))) %>%
+  group_by(nuts118nm) %>% 
+  mutate(num = n()) %>%
+  mutate(ratio = acci_ratio(num, total))
+  
+tm_shape(uk_ratio_2013) + 
+  tm_polygons(col="ratio", palette ="-RdYlBu", title="Accidents Ratio") + 
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+acci_2014 <- accident %>% 
+  filter(year == 2014)
+
+acci_2014 <- acci_2014 %>% filter(!(all_accid == 0))
+acci_2014 <- acci_2014 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_ratio_2014 <- uk_region %>% 
+  st_join(acci_2014) %>% 
+  group_by(nuts118nm) %>% 
+  mutate(total = n()) %>% 
+  filter((date >= as.Date("2014-03-30") & date <= as.Date("2014-04-05")) | 
+           (date >= as.Date("2014-10-26") & date <= as.Date("2014-11-01"))) %>%
+  group_by(nuts118nm) %>% 
+  mutate(num = n()) %>%
+  mutate(ratio = acci_ratio(num, total))
+  
+tm_shape(uk_ratio_2014) + 
+  tm_polygons(col="ratio", palette ="-RdYlBu", title="Accidents Ratio") + 
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+acci_2015 <- accident %>% 
+  filter(year == 2015)
+
+acci_2015 <- acci_2015 %>% filter(!(all_accid == 0))
+acci_2015 <- acci_2015 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_ratio_2015 <- uk_region %>% 
+  st_join(acci_2015) %>% 
+  group_by(nuts118nm) %>% 
+  mutate(total = n()) %>% 
+  filter((date >= as.Date("2015-03-29") & date <= as.Date("2015-04-04")) | 
+           (date >= as.Date("2015-10-25") & date <= as.Date("2015-10-31"))) %>%
+  group_by(nuts118nm) %>% 
+  mutate(num = n()) %>%
+  mutate(ratio = acci_ratio(num, total))
+  
+tm_shape(uk_ratio_2015) + 
+  tm_polygons(col="ratio", palette ="-RdYlBu", title="Accidents Ratio") + 
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+acci_2016 <- accident %>% 
+  filter(year == 2016)
+
+acci_2016 <- acci_2016 %>% filter(!(all_accid == 0))
+acci_2016 <- acci_2016 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_ratio_2016 <- uk_region %>% 
+  st_join(acci_2016) %>% 
+  group_by(nuts118nm) %>% 
+  mutate(total = n()) %>% 
+  filter((date >= as.Date("2016-03-27") & date <= as.Date("2016-04-02")) | 
+           (date >= as.Date("2016-10-30") & date <= as.Date("2016-11-05"))) %>%
+  group_by(nuts118nm) %>% 
+  mutate(num = n()) %>%
+  mutate(ratio = acci_ratio(num, total))
+  
+tm_shape(uk_ratio_2016) + 
+  tm_polygons(col="ratio", palette ="-RdYlBu", title="Accidents Ratio") + 
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+
+acci_2017 <- accident %>% 
+  filter(year == 2017)
+
+acci_2017 <- acci_2017 %>% filter(!(all_accid == 0))
+acci_2017 <- acci_2017 %>% st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(epsg_wgs84) %>% st_transform(epsg_uk) %>%
+  filter(lengths(st_intersects(., uk_region)) > 0)
+uk_ratio_2017 <- uk_region %>% 
+  st_join(acci_2017) %>% 
+  group_by(nuts118nm) %>% 
+  mutate(total = n()) %>% 
+  filter((date >= as.Date("2017-03-26") & date <= as.Date("2017-04-01")) | 
+           (date >= as.Date("2017-10-29") & date <= as.Date("2017-11-04"))) %>%
+  group_by(nuts118nm) %>% 
+  mutate(num = n()) %>%
+  mutate(ratio = acci_ratio(num, total))
+  
+tm_shape(uk_ratio_2017) + 
+  tm_polygons(col="ratio", palette ="-RdYlBu", title="Accidents Ratio") + 
+  tm_shape(uk_district) + 
+  tm_borders(lwd = 0.1)
+```
+
+## Immediate Effects of DST Change
+In order to examine the immediate effects of a change from Standard Time to Daylight Saving Time, or vice versa, we compared the two weeks immediately before a change with the two weeks immediately after. A new categorical variable was created in order to indicate whether a certain observation fell into any of these two week periods - and if so, which one - creating four subgroups of this subset of the data. Simple scatterplots of these four subgroups showed that the number of accidents appears to slightly decrease in the two weeks following a start in DST compared to the two weeks before, while the number accidents appears to increase in the two weeks following the end of DST compared to the two weeks before.  
+
+```{r, fig.show='hold', out.width="50%"}
+before_v_after <- function(date, start = -14, end = 14) {
+  year <- format(date, "%Y")
+  if (year == "2012") {
+    dst_dates <- as.Date(c("2012-03-25", "2012-10-28"))
+  } else if (year == "2013") {
+    dst_dates <- as.Date(c("2013-03-31", "2013-10-27"))
+  } else if (year == "2014") {
+    dst_dates <- as.Date(c("2014-03-30", "2014-10-26"))
+  } else if (year == "2015") {
+    dst_dates <- as.Date(c("2015-03-29", "2015-10-25"))
+  } else if (year == "2016") {
+    dst_dates <- as.Date(c("2016-03-27", "2016-10-30"))
+  } else {
+    dst_dates <- as.Date(c("2017-03-26", "2017-10-29"))
+  }
+  before1 <- (date < dst_dates[1] && date >= dst_dates[1] + start)
+  before2 <- (date < dst_dates[2] && date >= dst_dates[2] + start)
+  after1 <- (date <= dst_dates[1] + end && date >= dst_dates[1])
+  after2 <- (date <= dst_dates[2] + end && date >= dst_dates[2])
+  ifelse(before1, 1, ifelse(before2, 3, ifelse(after1, 2, ifelse(after2, 4, 0))))
+}
+
+b_a_v <- Vectorize(before_v_after)
+
+dlst4 <- df %>% 
+  mutate(date_f = as.Date(date), where_two_weeks = b_a_v(date_f))
+
+dlst4 %>% filter(where_two_weeks == 1 | where_two_weeks == 2) %>%
+  ggplot(aes(doy, all_accid)) + geom_point(aes(color = factor(where_two_weeks)), alpha=0.7) +
+  ggtitle("Accidents by Day", subtitle = "Before vs. After Start of DST") +
+  xlab("Day of Year") + ylab("Number of Accidents") +
+  scale_color_manual(values = c("#00abbf", "#f4d000"), name = "Within Two Weeks...", labels = c("Before", "After"))
+
+dlst4 %>% filter(where_two_weeks == 3 | where_two_weeks == 4) %>% 
+  ggplot(aes(doy, all_accid)) + geom_point(aes(color = factor(where_two_weeks)), alpha=0.7) +
+  ggtitle("Accidents by Day", subtitle = "Before vs. After End of DST") +
+  xlab("Day of Year") + ylab("Number of Accidents") +
+  scale_color_manual(values = c("#00abbf", "#f4d000"), name = "Within Two Weeks...", labels = c("Before", "After"))
+```
+
+When breaking down this data by age group and by year, this pattern appears to be mostly maintained, though some years do seem to go against this trend.
+
+In order to further examine the magnitude of the difference, two separate two sample t-tests were performed in order to compare the mean number of accidents per day before and after each change. The mean number of accidents per day in the two weeks before the start of Daylight Saving Time was approximately 369, while the mean number of accidents afterwards was approximately 349. The t-test yielded a p-value of 0.03289. Though perhaps not quite as strong as we would like, this is significant at $\alpha$ = 0.05. Furthermore, the 95% confidence interval for the difference between the two means does not contain zero, thus we can conclude that there is a decrease in accidents after the start of DST compared to before.  
+
+```{r}
+bef_start <- dlst4 %>% filter(where_two_weeks == 1) %>% 
+  group_by(date) %>% 
+  summarize(total = sum(all_accid))
+bef_st_vals <- bef_start$total
+
+aft_start <- dlst4 %>% filter(where_two_weeks == 2) %>% 
+  group_by(date) %>% 
+  summarize(total = sum(all_accid))
+aft_st_vals <- aft_start$total
+
+t.test(bef_st_vals, aft_st_vals, var.equal = FALSE)
+```
+
+For the end of Daylight Saving Time, the mean number of accidents per day in the two weeks before was approximately 391, while the mean number of accidents afterwards was approximately 420. The t-test yielded a p-value of 0.007127, which would be significant at $\alpha$ = 0.05, and is also stronger than the t-test for the start of DST. Furthermore, the 95% confidence interval for the difference between the two means does not contain zero, thus we can conclude that there is an increase in accidents after the end of DST compared to before.  
+
+```{r}
+bef_end <- dlst4 %>% filter(where_two_weeks == 3) %>% 
+  group_by(date) %>% 
+  summarize(total = sum(all_accid))
+bef_end_vals <- bef_end$total
+
+aft_end <- dlst4 %>% filter(where_two_weeks == 4) %>% 
+  group_by(date) %>% 
+  summarize(total = sum(all_accid))
+aft_end_vals <- aft_end$total
+
+t.test(bef_end_vals, aft_end_vals, var.equal = FALSE)
+```
+
+We then wanted to investigate how these changes look based on the year and geographical location. For each county in England, Wales, and Scotland, we plotted the change in mean number of accidents from before a time change to after. A map of these changes was made for both the start and end of Daylight Saving Time for each year, for a total of 12 maps (see appendix). The result we found was that, in most years, many counties saw a decrease in accidents due to the start of Daylight Saving Time, while seeing an increase in accidents due to the end of Daylight Saving Time. While there were instances in which this was not the case, the overall trend was consistent with this pattern.  
+
+```{r, fig.show='hold', out.width="50%"}
+ew_map <- st_read("../data/EW1971_admcounties/EW1971_admcounties.shp")
+scot_map <- st_read("../data/S1951_scocounties/S1951_scocounties.shp")
+uk_map <- rbind(ew_map, scot_map)
+
+dlst_sf_2 <- dlst4 %>% filter(where_two_weeks != 0) %>%
+  st_as_sf(coords = c("mlong", "mlat")) %>%
+  st_set_crs(4326) %>% st_transform(27700)
+
+mapped_acc_2 <- uk_map %>% st_join(dlst_sf_2) %>% 
+  group_by(G_UNIT, year, where_two_weeks) %>% 
+  summarize(total_acc = sum(all_accid)) %>%
+  ungroup() %>% 
+  filter(!is.na(where_two_weeks)) %>% 
+  pivot_wider(names_from = "where_two_weeks", values_from = "total_acc") %>% 
+  mutate(chg_start = (`2` - `1`) / 14, chg_end = (`4` - `3`) / 14)
+
+col_breaks <- c(-15, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 15)
+
+mapped_acc_2 %>% 
+  filter(year == 2015) %>% 
+  tm_shape() + tm_polygons(col = "chg_start", palette = "-RdYlGn", title = "2015: Start", style = "fixed", breaks = col_breaks) + 
+  tm_layout(legend.outside = TRUE)
+
+mapped_acc_2 %>% 
+  filter(year == 2015) %>% 
+  tm_shape() + tm_polygons(col = "chg_end", palette = "-RdYlGn", title = "2015: End", style = "fixed", breaks = col_breaks) + 
+  tm_layout(legend.outside = TRUE)
+```
+## Hourly Effects
+Lastly, we wanted to investigate whether Daylight Saving Time affects road safety differently at different times of day. For this, we used the hourly data from 2017. We plotted the average number of accidents for each hour of the day for each month. The most noticeable finding here was that the months surrounding the start and end of Daylight Saving Time followed a similar pattern to what we saw when investigating the immediate effects of DST changes. The average number of accidents seemed to decrease, especially in the morning, in April compared to March. Meanwhile, accidents seemed to increase for nearly all hours of the day in November compared to October.  
+
+```{r, fig.show='hold', out.width="25%"}
+dst_dates <- as.Date(c("2017-03-26", "2017-10-29"))
+
+bef_v_aft_hr <- function(date, start = -14, end = 14) {
+  ifelse((date < dst_dates[1] && date >= dst_dates[1] + start), 1,
+  ifelse((date < dst_dates[2] && date >= dst_dates[2] + start), 3,
+  ifelse((date <= dst_dates[1] + end && date >= dst_dates[1]), 2,
+  ifelse((date <= dst_dates[2] + end && date >= dst_dates[2]), 4, 0))))
+}
+
+ba_hr_v <- Vectorize(bef_v_aft_hr)
+
+dlst_2017_2 <- dlst_2017 %>%
+  mutate(date_f = as.Date(date), within_two_weeks = ba_hr_v(date_f))
+
+rates_mth <- dlst_2017_2 %>% 
+  mutate(Month = date_month_factor(date_f)) %>% 
+  group_by(Month, hour) %>% 
+  summarize(count = n(), total_acc = sum(all_accid), avg = total_acc / (count / 265)) %>%
+  ungroup()
+
+rates_mth %>% 
+  filter(Month == "March") %>% 
+  ggplot(aes(hour, avg)) + geom_line(colour = "#00abbf", size = 1) +
+  theme(legend.position = "none") +
+  labs(title = "Average Number of Accidents per Hour: March 2017",
+       x = "Hour of Day", y = "Average Number of Accidents") +
+  ylim(0, 45)
+
+rates_mth %>% 
+  filter(Month == "April") %>% 
+  ggplot(aes(hour, avg)) + geom_line(colour = "#00abbf", size = 1) +
+  theme(legend.position = "none") +
+  labs(title = "Average Number of Accidents per Hour: April 2017",
+       x = "Hour of Day", y = "Average Number of Accidents") +
+  ylim(0, 45)
+
+rates_mth %>% 
+  filter(Month == "October") %>% 
+  ggplot(aes(hour, avg)) + geom_line(colour = "#00abbf", size = 1) +
+  theme(legend.position = "none") +
+  labs(title = "Average Number of Accidents per Hour: October 2017",
+       x = "Hour of Day", y = "Average Number of Accidents") +
+  ylim(0, 45)
+
+rates_mth %>% 
+  filter(Month == "November") %>% 
+  ggplot(aes(hour, avg)) + geom_line(colour = "#00abbf", size = 1) +
+  theme(legend.position = "none") +
+  labs(title = "Average Number of Accidents per Hour: November 2017",
+       x = "Hour of Day", y = "Average Number of Accidents") +
+  ylim(0, 45)
+```
+
+This observation inspired us to return to investigating the immediate effects of Daylight Saving Time, this time looking at hourly accident rates. The same categorical variable from before was created for the hourly dataset, and a plot of the average number of accidents for each hour of the day was created for the four aforementioned subgroups. While accident rates appeared to be the same amongst the four two-week periods for most hours of the day, noticeable clustering could be observed at hours 8 and 17, corresponding to 8-9 am and 5-6 pm, respectively. At hour 8, we observed that accident rates were higher in the two weeks before the start of DST and after the end, while accident rates were lower in the two weeks after the start and before the end. This tells us that less accidents tend to occur in the morning during Daylight Saving Time. However, at hour 17, we observed that accident rates were higher after both the start and end of DST, compared to before both the start and end. This tells us that, in the evening, it is specifically a change in time protocol that leads to more accidents, as opposed to which time protocol is currently active.  
+
+```{r}
+rates <- dlst_2017_2 %>% 
+  filter(within_two_weeks != 0) %>% 
+  group_by(within_two_weeks, hour) %>% 
+  summarize(count = n(), total_acc = sum(all_accid), avg = total_acc / (count / 265)) %>% 
+  ungroup()
+
+ggplot(rates, aes(hour, avg)) + geom_line(aes(color = factor(within_two_weeks)), size = 1) +
+  ggtitle("Average Number of Accidents per Hour: 2017") + labs(subtitle = "Two Weeks Before and After DST Change") +
+  xlab("Hour of Day") + ylab("Average") +
+  scale_color_manual(values = c("#00abbf", "#f4d000", "#1f424c", "#E83D3D"), name = "Within two weeks...", labels = c("Before Start", "After Start", "Before End", "After End"))
+```
+
+# Discussion
+This study has given us insight into how Daylight Saving Time has affected road safety in the past decade depending on age group, type of accident, and the time of day accidents occurred. The most significant effect we observed was the effect on all types of accidents in the two weeks before and after each time change. The statistical analysis indicates that there is a significant difference between accident rates before and after the two time changes. This may be due to drive fatigue because of lost sleep or an increase in driving during the night. Practical uses of this observation may include heightening road safety precautions such as signage and speed limit enforcement during these times. 
+
+The regional analysis indicates that some parts of the UK, like Scotland and Southern England are more affected by the time change. Even more precautions can be taken in such places to further protect against increased accidents during the time change. 
+
+For the year as a whole in all regions, there only seems to be a very slight increase in accidents in the summer months for some age groups and accident types. However, there are a number of other factors that can affect accident rates such as weather conditions or individual drivers’ behavior. Therefore, we cannot conclude absolutely that Daylight Saving Time has an effect on accidents throughout the entire year. 
+
+While it is clear that the time change has an immediate negative effect on car safety, those who want to change the Daylight Saving Time policy must weigh this with the benefits that inspired the creation of DST in the first place.
+
+Since this study is limited to data from the United Kingdom, it would also be pertinent to perform the same study on data from the United States or other countries. Since there is a time difference between the US and the UK and Daylight Saving Time happens on different days, Daylight Saving Time may affect the two locations differently. 
+
+Another drawback is that it can be difficult to discern what factors besides DST directly affected the outcomes of the data. As previously discussed, worse weather during the winter months, holiday seasons, or decreased driver awareness may coincide with DST and also affect the number of accidents. This study could be improved and supplemented by an investigation of these factors on road safety, to determine if they do, in fact, contribute to the changes in car accidents that we observe throughout the year.
+
+# References
+  “Daylight Savings Time to Continue in the UK despite Limited Benefits.” The Economic Times, 26 Mar. 2023, https://economictimes.indiatimes.com/news/international/uk/daylight-savings-time-to-continue-in-the-uk-despite-limited-benefits/articleshow/99000607.cms.  
+  Barnes, C. M., and D. T. Wagner. Changing to daylight saving time cuts into sleep and increases workplace injuries. The Journal of applied psychology, vol. 94 ed. 5, 1305–1317, 2019. http://doi.apa.org/getdoi.cfm?doi=10.1037/a0015320.
+
+# Appendix
+```{r, fig.show='hold', out.width="50%"}
+dlst4_long <- dlst4 %>% pivot_longer(cols = u25_accid:slight_accid, names_to = "type", values_to = "count")
+
+dlst4_long %>% filter(where_two_weeks == 1 | where_two_weeks == 2) %>% 
+  filter(type %in% c("u25_accid", "o25u45_accid", "o45u65_accid", "o65_accid")) %>% 
+  ggplot(aes(doy, count)) + geom_point(aes(color = factor(where_two_weeks)), alpha=0.7) + facet_wrap(~type) +
+  ggtitle("Accidents by Day and Age Group", subtitle = "Before vs. After Start of DST") +
+  xlab("Day of Year") + ylab("Number of Accidents") +
+  scale_color_manual(values = c("#00abbf", "#f4d000"), name = "Within Two Weeks...", labels = c("Before", "After"))
+
+dlst4_long %>% filter(where_two_weeks == 3 | where_two_weeks == 4) %>% 
+  filter(type %in% c("u25_accid", "o25u45_accid", "o45u65_accid", "o65_accid")) %>% 
+  ggplot(aes(doy, count)) + geom_point(aes(color = factor(where_two_weeks)), alpha=0.7) + facet_wrap(~type) +
+  ggtitle("Accidents by Day and Age Group", subtitle = "Before vs. After End of DST") +
+  xlab("Day of Year") + ylab("Number of Accidents") +
+  scale_color_manual(values = c("#00abbf", "#f4d000"), name = "Within Two Weeks...", labels = c("Before", "After"))
+```
+
+```{r, fig.show='hold', out.width="50%"}
+dlst4 %>% filter(where_two_weeks == 1 | where_two_weeks == 2) %>% 
+  ggplot(aes(doy, all_accid)) + geom_point(aes(color = factor(where_two_weeks)), alpha=0.7) + facet_wrap(~year) +
+  ggtitle("Accidents by Day and Year", subtitle = "Before vs. After Start of DST") +
+  xlab("Day of Year") + ylab("Number of Accidents") +
+  scale_color_manual(values = c("#00abbf", "#f4d000"), name = "Within Two Weeks...", labels = c("Before", "After"))
+
+dlst4 %>% filter(where_two_weeks == 3 | where_two_weeks == 4) %>% 
+  ggplot(aes(doy, all_accid)) + geom_point(aes(color = factor(where_two_weeks)), alpha=0.5) + facet_wrap(~year) +
+  ggtitle("Accidents by Day and Year", subtitle = "Before vs. After End of DST") +
+  xlab("Day of Year") + ylab("Number of Accidents") +
+  scale_color_manual(values = c("#00abbf", "#f4d000"), name = "Within Two Weeks...", labels = c("Before", "After"))
+```
+
+```{r, fig.show='hold', out.width="50%"}
+dst_start <- ymd("2017-03-26") # Change to your region's DST start date
+dst_end <- ymd("2017-10-29") # Change to your region's DST end date
+fat_accident_2017<-df %>% filter(substr(date, 1, 4)=="2017") %>%
+  mutate(is_dst = ifelse(date >= dst_start & date < dst_end, "DST", "Standard Time")) %>%
+  group_by(date, is_dst) %>%
+  summarise(total_fat_accident=sum(fat_accid))
+fat_accident_2017 %>%
+  ggplot(aes(x = date, y = total_fat_accident, color = is_dst)) +
+  geom_point(position = "jitter") +
+  geom_vline(xintercept = as.numeric(dst_start), color="Blue", linetype="dashed") +
+  geom_vline(xintercept = as.numeric(dst_end), color="Blue", linetype="dashed") +
+  geom_text(aes(x = dst_start, y = 100, label = "DST Start"), angle=20, color="Blue") +
+  geom_text(aes(x = dst_end, y = 100, label = "DST End"), angle=20, color="Blue") +
+  labs(title = "UK Fatal accidents in 2017",
+       x = "Date",
+       y = "Total Fatal Accidents",
+       color = "Time Status") +
+  scale_color_manual(values = c("DST" = "orange", "Standard Time" = "green"))
+# Improved boxplot
+fat_accident_2017 %>%
+  ggplot(aes(x = is_dst, y = total_fat_accident, fill = is_dst)) +
+  geom_boxplot() +
+  labs(title = "UK Fatal accidents in 2017",
+       x = "Time Status",
+       y = "Total Fatal Accidents") +
+  scale_fill_manual(values = c("DST" = "orange", "Standard Time" = "green")) +
+  theme_minimal()
+```
+
+```{r, fig.show='hold', out.width="50%"}
+ser_accident_2017<-df %>% filter(substr(date, 1, 4)=="2017") %>%
+  mutate(is_dst = ifelse(date >= dst_start & date < dst_end, "DST", "Standard Time")) %>%
+  group_by(date, is_dst) %>%
+  summarise(total_ser_accident=sum(ser_accid))
+  
+  
+ser_accident_2017 %>%
+  ggplot(aes(x = date, y = total_ser_accident, color = is_dst)) +
+  geom_point(position = "jitter") +
+  geom_vline(xintercept = as.numeric(dst_start), color="Blue", linetype="dashed") +
+  geom_vline(xintercept = as.numeric(dst_end), color="Blue", linetype="dashed") +
+  geom_text(aes(x = dst_start, y = 100, label = "DST Start"), angle=20, color="Blue") +
+  geom_text(aes(x = dst_end, y = 100, label = "DST End"), angle=20, color="Blue") +
+  labs(title = "UK Serious accidents in 2017",
+       x = "Date",
+       y = "Total Serious Accidents",
+       color = "Time Status") +
+  scale_color_manual(values = c("DST" = "orange", "Standard Time" = "green"))
+# Improved boxplot
+ser_accident_2017 %>%
+  ggplot(aes(x = is_dst, y = total_ser_accident, fill = is_dst)) +
+  geom_boxplot() +
+  labs(title = "UK Serious accidents in 2017",
+       x = "Time Status",
+       y = "Total Serious Accidents") +
+  scale_fill_manual(values = c("DST" = "orange", "Standard Time" = "green")) +
+  theme_minimal()
+```
+
+```{r, fig.show='hold', out.width="50%"}
+slight_accident_2017<-df %>% filter(substr(date, 1, 4)=="2017") %>%
+  mutate(is_dst = ifelse(date >= dst_start & date < dst_end, "DST", "Standard Time")) %>%
+  group_by(date, is_dst) %>%
+  summarise(total_slight_accident=sum(slight_accid))
+  
+  
+slight_accident_2017 %>%
+  ggplot(aes(x = date, y = total_slight_accident, color = is_dst)) +
+  geom_point(position = "jitter") +
+  geom_vline(xintercept = as.numeric(dst_start), color="Blue", linetype="dashed") +
+  geom_vline(xintercept = as.numeric(dst_end), color="Blue", linetype="dashed") +
+  geom_text(aes(x = dst_start, y = 400, label = "DST Start"), angle=20, color="Blue") +
+  geom_text(aes(x = dst_end, y = 400, label = "DST End"), angle=20, color="Blue") +
+  labs(title = "UK Slight accidents in 2017",
+       x = "Date",
+       y = "Total Slight Accidents",
+       color = "Time Status") +
+  scale_color_manual(values = c("DST" = "orange", "Standard Time" = "green"))
+# Improved boxplot
+slight_accident_2017 %>%
+  ggplot(aes(x = is_dst, y = total_slight_accident, fill = is_dst)) +
+  geom_boxplot() +
+  labs(title = "UK Slight accidents in 2017",
+       x = "Time Status",
+       y = "Total Slight Accidents") +
+  scale_fill_manual(values = c("DST" = "orange", "Standard Time" = "green")) +
+  theme_minimal()
+```
+
