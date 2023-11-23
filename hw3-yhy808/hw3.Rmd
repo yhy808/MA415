@@ -1,0 +1,71 @@
+---
+title: "MA [46]15 Homework 3"
+author: "Hongyi Yu"
+output: github_document
+---
+
+## Question 1
+
+My work is to perform a preliminary EDA of the **real state properties** in
+Boston in 2023. To this end, I downloaded the "Property Assessment FY2023"
+data file from the
+[Analyze Boston](https://data.boston.gov/dataset/property-assessment) web page,
+and loaded it into a new dataset called `property`.
+
+
+```{r q1}
+library(tidyverse)
+property <- read_csv("/Users/victoria/Desktop/MA415/hw3-yhy808/data/fy2023-property-assessment-data.csv",
+                     col_types = cols_only(
+                       LUC = col_integer(),
+                       LU = col_character(),
+                       GROSS_TAX = col_double(),
+                       GROSS_AREA = col_integer()))
+problems(property)
+
+```
+
+
+## Question 2
+
+There are many "unusual" values, including tax exempt properties. Next, I'm
+filtering out these cases to get a new dataset, `property_rep`.
+
+
+```{r q2}
+(property_rep <- property %>% 
+   group_by(LUC) %>% 
+   filter(median(GROSS_TAX) < 5000000, n() >= 5, LU != "E", LU != "EA") %>%
+   ungroup())
+
+```
+
+## Question 3
+
+To summarize what I have in `property_rep`, here is a table with the
+proportions of properties by land use (`LU`), ordered by proportion, and the
+cumulative proportions.
+
+
+```{r q3}
+(property_rep %>% group_by(LU)) %>%
+  summarize(count = n()) %>%
+  mutate(prop = count/sum(count)) %>%
+  arrange(desc(prop)) %>%
+  mutate(cul_prop = cumsum(prop))
+```
+The "LU" with the highest count is "CD", which means residential condominium unit. It occupies 40.87% of the total properties. Residential-1-family is the second high "LU" in the count of property, which is much higher than residential-2-family and residential-3-family. This result is expected because it is reasonable that residential units occupy a great part of properties.
+
+
+## Question 4
+
+Finally, I summarize my findings with log gross tax boxplots for each land
+use.
+
+```{r q4}
+property_rep %>% group_by(LU) %>% 
+  mutate(count = n()) %>% 
+  ggplot(aes(reorder(LU, GROSS_TAX, FUN = median), log(GROSS_TAX))) + 
+  geom_boxplot(aes(fill = count))
+```
+
