@@ -1,0 +1,61 @@
+---
+title: "MA [46]15 Homework 2"
+author: "Hongyi Yu"
+output: github_document
+---
+
+In this homework I'm performing a more detailed analysis of the `nycflights13` dataset I saw in lecture. I start by loading the packages:
+
+```{r init}
+library(tidyverse)
+library(nycflights13)
+```
+
+
+## Question 1
+
+Here are the top 4 carriers in total number of flights departing NYC in 2013:
+
+```{r q1}
+unique(flights$carrier) # all carriers
+(big_carriers <- (flights %>% group_by(carrier) %>% summarize(count = n()) %>% mutate(rank = min_rank(desc(count))) %>% arrange(rank) %>% filter(rank <= 4))$carrier)
+```
+
+
+## Question 2
+
+Here are the proportion of canceled flights originated at each NYC airport for the top 4 carriers above:
+
+
+```{r q2}
+flights %>% filter(carrier %in% big_carriers) %>%
+  group_by(origin, carrier) %>%
+  summarize(prop_canceled = mean(is.na(arr_delay) | is.na(dep_delay))) %>%
+  arrange(origin, desc(prop_canceled))
+```
+
+The proportions of canceling flights are mostly between 0.01 to 0.05. The carrier EV cancels more often than other carriers. The carrier EV originated at LGA has the highest proportion of canceling flights.
+
+
+
+## Question 3
+
+To investigate if there is any pattern of flight cancellations depending on the time of year, I first create a `canceled_by_doy` dataset with the proportion of canceled flights for each day of the year (`doy`) and `origin`:
+
+```{r q3}
+(canceled_by_doy <- flights %>% mutate(flights, doy = as.integer(strftime(time_hour, format = "%j"))) %>% group_by(doy, origin) %>% summarize(prop_canceled = mean(is.na(arr_delay) | is.na(dep_delay))))
+```
+
+
+## Question 4
+
+
+```{r q4}
+canceled_by_doy %>%
+  ggplot(aes(x = doy, y = prop_canceled, color = origin)) + geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE)
+```
+
+Generally, the shape of curves is horizontal and smooth. The unusual days are mid-year and end of the year, where the curve goes up slightly.
+
+
