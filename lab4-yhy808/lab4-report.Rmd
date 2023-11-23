@@ -1,0 +1,44 @@
+---
+title: "MA [46]15 Lab activity 4"
+author: "Hongyi Yu"
+output: github_document
+---
+
+# Introduction
+
+My work in this lab activity is to continue the analysis of the **real state
+properties** in Boston in 2023. In Homework 3 I created a dataset called
+`property`, based on data the "Property Assessment FY2023" data file from the
+[Analyze Boston](https://data.boston.gov/dataset/property-assessment) web
+page.
+
+
+```{r intro}
+library(tidyverse)
+property <- read_csv("/Users/victoria/Desktop/MA415/lab4-yhy808/Data/fy2023-property-assessment-data.csv",
+                     col_types = cols_only(PID = col_character(),
+                                           TOTAL_VALUE = col_double(),
+                                           LAND_SF = col_double()))
+problems(property)
+property <- property %>% filter(!is.na(TOTAL_VALUE), !is.na(LAND_SF), TOTAL_VALUE > 0, LAND_SF > 0)
+```
+
+
+# Data analysis
+
+```{r a1}
+(property <- property %>% mutate(ward = substring(PID,1,2), value_per_sf = TOTAL_VALUE/LAND_SF))
+property %>% ggplot(aes(ward, log(value_per_sf))) + geom_boxplot()
+
+```
+
+# Discussion
+
+```{r a2}
+(property <- property %>% mutate(equiv_sm = 1000000/value_per_sf*0.093) %>%
+  group_by(ward) %>%
+  summarize(mean_equiv = mean(equiv_sm)) %>%
+  mutate(rank = min_rank(mean_equiv)) %>%
+  arrange(rank))
+```
+Ward 04 has the most expensive properties on average, where 1 million dollars is equivalent to the area of 132.73 square meters. It is cheaper than other prime property square meterages around the world, such as Monaco, Hongkong, London, New York, and Singapore. The property square meterage is similar with Dubai. And it is more expensive than Cape Town and Sao Paulo.
