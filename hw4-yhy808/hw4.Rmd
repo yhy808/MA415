@@ -1,0 +1,49 @@
+---
+title: "MA [46]15 Homework 4"
+author: "Hongyi Yu"
+output: github_document
+---
+
+## Question 1
+My work is to perform a preliminary analysis of COVID-19 vaccination status in Massachusetts. I downloaded the
+[COVID-19 vaccination](https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh) dataset from the CDC,
+and loaded it into a new dataset called `covid_vac`.
+
+```{r q1}
+library(tidyverse)
+covid_vac <- read_csv("data/COVID-19_Vaccinations_MA_County.csv", comment ="#")
+problems(covid_vac)
+
+covid_vac_s <- covid_vac %>% select(Date, Recip_County, MMWR_week, Metro_status, Administered_Dose1_Recip_5PlusPop_Pct, Administered_Dose1_Recip_12PlusPop_Pct, Administered_Dose1_Recip_18PlusPop_Pct, Administered_Dose1_Recip_65PlusPop_Pct)
+(covid_vac_s <- as_tibble(covid_vac_s))
+```
+
+
+## Question 2
+
+```{r q2}
+library(lubridate)
+(covid_vac_l <- covid_vac_s %>% 
+    filter(as.Date(Date, format = "%m/%d/%Y") %>% year() == 2021) %>%
+    pivot_longer(cols = starts_with("Administered"), names_to = "Dose1_age_group", values_to = "Pop_percent"))
+```
+
+
+## Question 3
+
+```{r q3}
+covid_vac_l %>% filter(Recip_County == "Suffolk County") %>%
+  ggplot(aes(MMWR_week, Pop_percent)) + geom_point(aes(color = Dose1_age_group))
+```
+Older people have a higher vaccination rate, while younger people have a relatively lower vaccination rate. People in the age group of 65 plus have the highest vaccination rate of around 95%. People in the age group of 18 plus and 12 plus have the vaccination rate of around 90%. People in the age group of 5 plus have the lowest vaccination rate of around 87%. Also, older people tend to get vaccinated earlier, while younger people tend to get vaccinated later. 
+
+
+## Question 4
+
+```{r q4}
+covid_vac_l %>% filter(!is.na(Metro_status), Dose1_age_group == "Administered_Dose1_Recip_18PlusPop_Pct") %>%
+  ggplot(aes(factor(MMWR_week), Pop_percent, fill = Metro_status)) + geom_boxplot()
+```
+The variation of the proportion of getting vaccination for people older than 18 is larger in metro areas than in non-metro areas. The distributions of the MMWR_week of getting vaccination are similar between metro areas and non-metro areas. The average vaccination rate in metro areas is a little higher than in non-metro areas.
+
+
