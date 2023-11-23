@@ -1,0 +1,49 @@
+---
+title: "MA [46]15 Homework 1"
+author: "Hongyi Yu"
+output: github_document
+---
+
+In this homework I'm analyzing the `msleep` dataset from package `ggplot2`.
+I start by loading the packages:
+
+```{r init}
+library(tidyverse)
+msleep
+```
+
+
+
+## Question 1
+The relationship between the two variables are linear after log transformation. log(brainwt) and log(bodywt) have a strong positive relationship, which means an increase in the percentage of brainwt is associated with an increase in the percentage change of bodywt.
+
+```{r q1}
+ggplot(msleep) + geom_point(aes(x = log(bodywt), y = log(brainwt), color = vore))
+```
+
+
+## Question 2
+Carnivores are the mammals with the largest body weight, and insectivores have the smallest body weight. Herbivores have the second largest body weight. Omnivores have a smaller body weight than herbivores.
+
+```{r q2}
+ggplot(msleep) + geom_boxplot(aes(x = vore, y = log(bodywt))) + coord_flip()
+```
+
+
+## Question 3
+For the species that are more endangered (en/ vn), they have a relatively large difference in sleep time. The endangered species(en) have the highest mean in the fraction of sleep time in the day, which means they sleep more. For the species that are less endangered(cd/ lc/ nt), conservation dependent species(cd) have the lowest mean in the fraction of sleep time, which means they sleep less.
+
+```{r q3}
+ggplot(msleep, aes(x = conservation, y = sleep_total/24, color = vore)) + 
+  geom_point(position = "jitter") +
+  stat_summary(fun = mean, fun.max = max, fun.min = min, geom = "crossbar", color = "blue")
+```
+
+
+## Question 4
+
+```{r q4}
+ggplot(msleep) +
+  geom_bar(aes(x=conservation, fill = vore)) +
+  coord_polar()
+```
