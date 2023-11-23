@@ -1,0 +1,68 @@
+---
+title: "MA [46]15 Homework 5"
+author: "Hongyi Yu"
+output: github_document
+---
+
+## Question 1
+
+In this work I'll analyze the titles of papers presented at the NIPS
+conference from 1987 to 2017. The data in file `nips-titles.csv`, loaded into
+table `papers`, contains only two columns, `year` and `title` from the
+[original Kaggle dataset](https://www.kaggle.com/benhamner/nips-papers).
+As an initial check, I'm plotting the distribution of number of words in title
+for each year.
+
+
+```{r q1}
+library(tibble)
+library(tidyr)
+library(tidyverse)
+papers <- read_csv("data/nips-titles.csv",
+                   col_types = cols_only(year = col_integer(),
+                                         title = col_character()))
+problems(papers)
+
+(papers <- papers %>% mutate(word_count = str_count(title, "\\S+")))
+ggplot(papers, aes(as.factor(year), word_count)) + geom_boxplot()
+```
+Generally, the variability of the title sizes is stable. It slightly decreases over the years, and the outliers also decrease a little bit. 
+ 
+
+## Question 2
+
+```{r q2}
+keywords <- tibble(keyword = c("bayesian", "data", "deep", "models", "networks", "neural", "learning", "optimization", "stochastic"))
+keyword = c("bayesian", "data", "deep", "models", "networks", "neural", "learning", "optimization", "stochastic")
+papers$title <- str_to_lower(papers$title)
+(papers_keyword <- papers %>%
+    crossing(tibble(keyword = keyword)) %>%
+    mutate(keyword_in_title = str_detect(title, keyword)) %>%
+    filter(year >= 2008) %>% 
+    group_by(year, keyword) %>%
+    summarize(n = sum(keyword_in_title)) %>%
+    spread(keyword, n))
+```
+
+
+## Question 3
+
+```{r q3}
+(papers_long <- pivot_longer(papers_keyword, cols = -year, names_to = "keyword", values_to = "n"))
+ggplot(papers_long, aes(x = year, y = n, color = keyword)) + geom_line()
+```
+"learning" is the most popular keyword. Its popularity decreases slightly in 2013 and 2015, and increase dramatically from 2015 to 2017. Generally, all keywords increases in popularity for the last ten years. 
+
+
+## Question 4
+
+```{r q4}
+papers_year <- papers %>%
+  group_by(year) %>%
+  summarize(n_papers = n())
+(papers_prop <- papers_keyword %>% left_join(papers_year, by = "year") %>% 
+  pivot_longer(keyword, names_to = "keyword", values_to = "n") %>%
+  mutate(prop = n/n_papers))
+ggplot(papers_prop, aes(x = year, y = prop, color = keyword)) + geom_line()
+```
+"learning" is the keyword with the highest proportion in titles, which is the same as Question 3. However, the proportion of "learning" decreases from 2011 to 2015, which is different from Question 3. Then, it increases dramatically from 2015 to 2017 as we see in Question 3. Generally, most keywords have a rising trend with the proportion of titles, except "models" and "data". 
