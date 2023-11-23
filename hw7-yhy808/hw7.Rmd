@@ -1,0 +1,88 @@
+---
+title: "MA [46]15 Homework 7"
+author: "Hongyi Yu"
+output: github_document
+---
+
+
+## Question 1
+
+
+```{r q1}
+library(tidyverse)
+library(nycflights13)
+library(geosphere)
+
+dist_geo <- function (lon_from, lat_from, lon_to, lat_to) {
+  geosphere::distGeo(cbind(lon_from, lat_from), c(lon_to, lat_to))
+}
+
+jfk <- airports %>% 
+  filter(faa == "JFK") %>% 
+  select(lon = lon, lat = lat)
+
+(flights_dist <- airports %>% 
+  filter(faa %in% unique(flights$dest)) %>%
+  mutate(dist=dist_geo(lon, lat, jfk$lon, jfk$lat)) %>% 
+  inner_join(flights, by = c("faa" = "dest")))
+
+ggplot(flights_dist, aes(x = log(distance), y = log(dist))) + geom_point()
+
+```
+
+
+## Question 2
+
+```{r q2}
+flights_mt <- flights_dist %>%
+  filter(!is.na(dep_delay) & !is.na(arr_delay) & !is.na(distance) & !is.na(tailnum)) %>%
+  mutate(madeup_time = dep_delay - arr_delay)
+
+lm_madeup_time <- lm(madeup_time ~ log(dist), flights_mt)
+
+ggplot(flights_mt, aes(x = log(distance), y = madeup_time, alpha = 0.3)) + 
+  geom_point() +
+  geom_smooth(method = "lm", color = "red", se = FALSE)
+
+lm(madeup_time ~ log(dist), flights_mt)
+lax <- airports %>% filter(faa == "LAX") %>% select(lon, lat)
+log_dist_lax <- log(dist_geo(jfk$lon, jfk$lat, lax$lon, lax$lat)) 
+madeup_time_lax <- coef(lm_madeup_time)[1] + coef(lm_madeup_time)[2] * log_dist_lax
+(arr_delay_lax <- 30 - madeup_time_lax)
+
+```
+The linear coefficient is 2.132, which verifies the assumption that the travel will have more made-up time for delay if it has a long distance. 
+If you're traveling to Los Angeles international airport and your flight left JFK with a 30 minute delay, the predicted arrival delay is about 22 minutes.
+
+
+## Question 3
+
+```{r q3}
+flights_load <- flights %>%
+  group_by(origin, month, day) %>% 
+  summarize(trips = n())
+
+rep_flights <- flights %>%
+  group_by(carrier) %>% filter(n_distinct(flight) > 100) %>%
+  group_by(carrier, flight) %>% filter(n() > 50) %>% ungroup()
+
+(flights_load <- left_join(rep_flights, flights_load, by = c("origin", "month", "day")) %>%
+  mutate(ontime = if_else(arr_delay <= 15 & !is.na(dep_time), 1, 0)))
+```
+
+## Question 4
+
+```{r q4}
+model <- glm(ontime ~ trips + carrier-1, flights_load, family = binomial)
+(coef<-coef(model))
+
+coef_carriers<-coef(model)[2:length(coef(model))]
+carrier_data <- data.frame(
+  carrier = c("9E","AA", "B6", "DL", "EV", "MQ", "UA", "US", "WN"),
+  coefficient = coef_carriers)
+ggplot(carrier_data, aes(x=fct_reorder(carrier, coefficient), y=coefficient)) +
+  geom_bar(stat='identity')
+
+((log(1)-coef[5])/coef[1])
+```
+The coefficient of trip is -0.006, which is negative. It means that an increase in the number of trips in a given date will decrease the probability that the flight being on-time, which meets my expectation. We need around 546 trips for the predicted probability of the flight being on-time to be 50%.
